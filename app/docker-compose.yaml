@@ -1,0 +1,32 @@
+version: "3.8"
+services:
+  front_end:
+    image: front_end:1.0
+    ports:
+      - 3000:3000
+    depends_on:
+      - back_end
+  back_end:
+    image: back_end:1.0
+    ports:
+      - 5000:5000
+    environment:
+      MONGO_URI: mongodb://Srinidhi101:Srinidhi2000@mongo:27017/notebookdb?authSource=notebookdb
+      JWT_SECRET: thisisthemostsecureserver
+    depends_on:
+      - mongo
+  mongo:
+    image: mongo:latest
+    ports:
+      - 27017:27017
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: Srinidhi101
+      MONGO_INITDB_ROOT_PASSWORD: Srinidhi2000
+      MONGO_INITDB_DATABASE: notebookdb
+    healthcheck:
+      test: ["CMD", "mongo", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - ./mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js
