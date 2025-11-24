@@ -1,0 +1,172 @@
+# --- 1. SECRET for Sensitive Configuration (MONGO_URI, JWT_SECRET, MONGO_USER, MONGO_PASS) ---
+# NOTE: All 'data' fields MUST be base64-encoded strings.
+# You must replace the placeholders with your actual encoded values.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: notebook-secrets
+  labels:
+    app: notebook-app
+type: Opaque
+data:
+  # Base64 encoded value for a full MONGO_URI. 
+  # If MongoDB is running IN THE CLUSTER (e.g., service 'mongodb-svc'), the host part
+  # should be the internal Service name (e.g., 'mongodb://$(MONGO_USER):$(MONGO_PASS)@mongodb-svc:27017/notebook_db').
+  MONGO_URI: <BASE64_ENCODED_MONGO_URI> 
+  
+  # Base64 encoded value for the MongoDB Username
+  MONGO_USER: <BASE64_ENCODED_MONGO_USERNAME>
+  
+  # Base64 encoded value for the MongoDB Password
+  MONGO_PASS: <BASE64_ENCODED_MONGO_PASSWORD>
+  
+  # Base64 encoded value for JWT_SECRET
+  JWT_SECRET: <BASE64_ENCODED_JWT_SECRET>
+
+---
+# --- 2. BACKEND Deployment (Port 5000) ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notebook-backend-deployment
+  labels:
+    app: notebook-app
+    tier: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: notebook-app
+      tier: backend
+  template:
+    metadata:
+      labels:
+        app: notebook-app
+        tier: backend
+    spec:
+      containers:
+      - name: backend
+        image: <your-backend-image-name> # REPLACE ME (e.g., myregistry/notebook-backend:v1)
+        ports:
+        - containerPort: 5000
+        env:
+          # Inject non-sensitive environment variables from ConfigMap
+          - name: APP_VERSION
+            valueFrom:
+              configMapKeyRef:
+                name: notebook-config
+                key: APP_VERSION
+          # Inject sensitive environment variables from Secret
+          - name: MONGO_URI
+            valueFrom:
+              secretKeyRef:
+                name: notebook-secrets
+                key: MONGO_URI
+          - name: MONGO_USER
+            valueFrom:
+              secretKeyRef:
+                name: notebook-secrets
+                key: MONGO_USER
+          - name: MONGO_PASS
+            valueFrom:
+              secretKeyRef:
+                name: notebook-secrets
+                key: MONGO_PASS
+          - name: JWT_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: notebook-secrets
+                key: JWT_SECRET
+        # Add necessary resource requests/limits for production
+        resources:
+          limits:
+            memory: "128Mi"
+            cpu: "500m"
+
+---
+# --- 3. BACKEND Service (ClusterIP for Internal Access) ---
+# This service is only accessible within the Kubernetes cluster,
+# primarily by the 'notebook-frontend-deployment'.
+apiVersion: v1
+kind: Service
+metadata:
+  name: notebook-backend-svc
+  labels:
+    app: notebook-app
+    tier: backend
+spec:
+  selector:
+    app: notebook-app
+    tier: backend
+  ports:
+    - protocol: TCP
+      port: 5000 # Service Port
+      targetPort: 5000 # Container Port
+  type: ClusterIP
+
+---
+# --- 4. FRONTEND Deployment (Port 3000) ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notebook-frontend-deployment
+  labels:
+    app: notebook-app
+    tier: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: notebook-app
+      tier: frontend
+  template:
+    metadata:
+      labels:
+        app: notebook-app
+        tier: frontend
+    spec:
+      containers:
+      - name: frontend
+        image: <your-frontend-image-name> # REPLACE ME (e.g., myregistry/notebook-frontend:v1)
+        ports:
+        - containerPort: 3000
+        # The environment variable has been removed as requested.
+        resources:
+          limits:
+            memory: "128Mi"
+            cpu: "500m"
+
+---
+# --- 5. FRONTEND Service (NodePort for External Access via Minikube) ---
+# Minikube makes this NodePort accessible from your local machine.
+# This Service is used for accessing the login page/UI.
+apiVersion: v1
+kind: Service
+metadata:
+  name: notebook-frontend-svc
+  labels:
+    app: notebook-app
+    tier: frontend
+spec:
+  selector:
+    app: notebook-app
+    tier: frontend
+  ports:
+    - protocol: TCP
+      port: 80 # Service Port. Requests to the Node's IP:30080 will hit this port.
+      targetPort: 3000 # Container Port
+      nodePort: 30080 # EXPLICITLY set the port on the node host
+  type: NodePort
+
+---
+# --- 6. ConfigMap for Non-Sensitive Configuration ---
+# Stores configuration data that does not need to be kept secret.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: notebook-config
+  labels:
+    app: notebook-app
+data:
+  # Example non-sensitive value
+  APP_VERSION: "1.0.0-poc"

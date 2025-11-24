@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notebook-backend-Deployment
+  labels:
+    app: notebook
+    tier: backend
+  namespace: kube-notebook
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: notebook
+      tier: backend
+  template:
+    metadata:
+      labels:
+        app: notebook
+        tier: backend
+    spec:
+      containers:
+        - name: notebook:backend
+          image: notebook:backend-1.0.0
+          ports:
+          - containerPort: 5000
+          env:
+            - name: MONGO_INITDB_ROOT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: notebook-Secrets
+                  key: mongo-dbusername
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: notebook-Secrets
+                  key: mongo-dbpassword
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: notebook-Secrets
+                  key: jwt_secret
+            - name: MONGO_URI
+              valueFrom:
+                secretKeyRef:
+                  name: notebook-Secrets
+                  key: mongo-init-db
+---
+apiVersion: v1
+kind: Service
+metdata:
+  name: backend-Service
+  labels:
+    app: notebook
+    tier: backend
+  namespace: kube-notebook
+spec:
+  selector:
+    app: notebook
+  type: clusterIP
+  ports:
+    - port: 5000
+      targetPort: 5000
+      protocol: TCP
